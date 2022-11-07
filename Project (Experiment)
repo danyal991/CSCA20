@@ -1,0 +1,2419 @@
+#READ "README.txt" FILE FIRST
+from PIL import Image 
+import random
+import numpy as np
+import pandas as pd
+import time
+import sys
+from threading import Timer
+import csv
+from csv import DictReader
+import pingouin as pg
+import matplotlib.pyplot as plt
+
+def feed_and_water ():
+    """
+    input: none
+    output: string of either A, B or "quit"
+    
+    Asks user what they want to do and checks if input is valid
+    Returns choice in a string
+    """
+    options = input("""Option A - Feed the mice
+Option B - Give mice water
+Option Q - Quit the Program (lose all progress)
+Please enter "A" or "B" or "Q": """)
+    #ask user again for input if the input is not one of the options
+    while options != "A" and options != "a" and options != "B" and options != "b" and options != "Q" and options != "q":
+        print("Please enter a valid option")
+        options = input("""Option A - Feed the mice
+Option B - Give mice water
+Option Q - Quit the Program (lose all progress)
+Please enter "A" or "B" or "Q": """)
+    #if input is A, return "A"
+    if options == "A" or options == "a":
+        options = "A"
+    #if input it B, return "B"
+    elif options == "B" or options == "b":
+        options = "B"
+    #if input is Q, return "quit"
+    else:
+        options = "quit"
+    return options
+
+def make_rand_list (number1, number2):
+    """
+    input: starting and ending number of where random numbers will be chosen from (int)
+    output: random list of numbers in the range of number1 and number2 (int)
+    """
+    #make a while loop that randomly generates a number between 25 ad 50
+    rand_set = set()
+    while len(rand_set) < 10:
+        #generate a random number between 25 and 50
+        rand_fw = random.randint(number1,number2)
+        if rand_fw not in rand_set:
+            rand_set.add(rand_fw)
+
+    #make a list of random numbers between 25 and 50
+    rand_list = list(rand_set)
+    return rand_list
+
+def setup_dict_hb ():
+    """
+    input: None
+    output: Dictionary mapping each mouse (keys) to a healthbar (hb) value
+    """
+    #open mouse csv file to read
+    mouse_handle = open("mouse_healthbar.csv", "r")
+    csv_reader = csv.DictReader(mouse_handle)
+    #produce a dictionary that maps each mouse with a food/water category 
+    mouse_to_hb = {}
+    # for looping through each line in the csv,
+    for next_row in csv_reader:
+        #THEN append the corresponding food and water value into a list (the value) to that mouse (the key)
+        mouse_to_hb[next_row['Mice']] = 200
+    mouse_handle.close()
+    return (mouse_to_hb)
+
+#mouse to health bar dict is = set-up for mouse to healthbar (from function output setup_dict_hb)
+mouse_to_hb = setup_dict_hb()
+
+maxHealth = 200    # Max Health
+healthDashes = 20  # Max Displayed dashes
+
+def do_health(health):
+#https://stackoverflow.com/questions/48035367/python-text-game-health-bar
+    """
+    input: final health of mouse
+    output: healthbar + percentage
+    """
+    dashConvert = int(maxHealth/healthDashes)            # Get the number to divide by to convert health to dashes (being 10)
+    currentDashes = int(health/dashConvert)              # Convert health to dash count: 80/10 => 8 dashes
+    remainingHealth = healthDashes - currentDashes       # Get the health remaining to fill as space => 12 spaces
+
+    healthDisplay = '-' * currentDashes                  # Convert 8 to 8 dashes as a string:   "--------"
+    remainingDisplay = ' ' * remainingHealth             # Convert 12 to 12 spaces as a string: "            "
+    percent = str(int((health/maxHealth)*100)) + "%"     # Get the percent as a whole number:   40%
+
+    print("         |" + healthDisplay + remainingDisplay + "| ", end='')  # Print out textbased healthbar 
+    print("" + percent)                                  # Print the percent
+    
+mouse_to_hb = setup_dict_hb ()
+rand_list = make_rand_list(25,50)
+
+
+def update_health (group_name, Water, Food, dead_list):
+    """
+    input: group name of mice, Water and Food Boolean, list of fead mice
+    output: updated list of dead mice and calculated final health bar value for each mouse
+    
+    Calculate new healthbar values for each mice in a given group, based on food and water stats.
+    (e.g If Feed (or Water) == False, subtract a random number between 25-50 from their healthbar.)
+    """
+    for i in group_name:
+        #generate a random number from a random list of numbers (between 25-50)
+        rand_num_w = random.choice(rand_list)
+        rand_num_f = random.choice(rand_list)
+        if Water == True and Food == True:
+            if mouse_to_hb[i] <= 0:
+                mouse_to_hb[i] = 0
+            else:
+                final_hb = 200
+                mouse_to_hb[i] = final_hb
+        #if they were watered but NOT fed
+        elif Water == True and Food == False:
+            if mouse_to_hb[i] <= 0:
+                mouse_to_hb[i] = 0
+            else:
+                final_hb = mouse_to_hb[i] + rand_num_w - rand_num_f
+                if final_hb <= 0:
+                    mouse_to_hb[i] = 0
+                    if i not in dead_list: 
+                        dead_list.append(i)
+                elif final_hb >= 200:
+                    mouse_to_hb[i] = 200
+                else:
+                    mouse_to_hb[i] = final_hb
+        #if they were fed but NOT watered
+        elif Water == False and Food == True:
+            if mouse_to_hb[i] <= 0:
+                mouse_to_hb[i] = 0
+            else:
+                final_hb = mouse_to_hb[i] - rand_num_w + rand_num_f
+                if final_hb <= 0:
+                    mouse_to_hb[i] = 0
+                    if i not in dead_list: 
+                        dead_list.append(i)
+                elif final_hb >= 200:
+                    mouse_to_hb[i] = 200
+                else:
+                    mouse_to_hb[i] = final_hb
+        #if they were neither fed nor watered
+        elif Water == False and Food == False:
+            if mouse_to_hb[i] <= 0:
+                    mouse_to_hb[i] = 0
+            else:
+                final_hb = mouse_to_hb[i] - (rand_num_w + rand_num_f) 
+                if final_hb <= 0:
+                    mouse_to_hb[i] = 0
+                    if i not in dead_list: 
+                        dead_list.append(i)
+                else:
+                    mouse_to_hb[i] = final_hb
+
+def get_health (group_name, Food, Water):
+    """
+    input: group name of mice, Food and Water booleans
+    output: display updated healthbar (call do_health function), print food/water status of previous day. 
+    
+    (e.g if Food (or Water) == False, state not fed (or watered) beside each mouse's name.)
+    """
+    for i in group_name:
+        #If watered and fed
+        if Water == True and Food == True:
+            #if mouse's health is currently 0, keep mouse healthbar equal 0
+            if mouse_to_hb[i] <= 0:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+            #Otherwise, print name of mouse, health bar percentage, and display healthbar (call do_health)
+            else:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+                print ("fed and given water: ", mouse_to_hb[i])
+                print ("")
+        #If watered but not fed
+        elif Water == True and Food == False:
+            if mouse_to_hb[i] <= 0:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+            else:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+                print ("Given water but NOT fed: ", mouse_to_hb[i])
+                print ("")
+        #If not watered but fed
+        elif Water == False and Food == True:
+            if mouse_to_hb[i] <= 0:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+            else:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+                print ("Fed but NOT given water: ", mouse_to_hb[i])
+                print ("")
+        #If neither watered nor fed
+        elif Water == False and Food == False:
+            if mouse_to_hb[i] <= 0:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+            else:
+                print ([i][0], end='')
+                do_health(mouse_to_hb[i])
+                print ("NOT fed nor given water: ", mouse_to_hb[i])
+                print ("")
+    
+
+def what_water (group_name):
+    """
+    input = name of mouse group
+    output: Boolean (True or False)
+    
+    Asks user if the mice should be given sour or plain water. If answered incorrectly, it will return False and 
+    end the program
+    If answered correctly, it will return True 
+    """
+    type_water = input("""
+For """ + group_name + """, should they be given sour water or plain water? Choose carefully! If you give the
+mouse group the wrongwater type, the experiment is a fail and it will end immediately!
+Please enter 'sour' for sour water and 'plain' for plain water: """)
+    #changes type_water input into all lowercase
+    type_water_case = type_water.lower()
+    #checks that they only type either "sour" or "plain"
+    while type_water_case != "sour" and type_water_case != "plain":
+        print("Please enter a valid input")
+        type_water = input("""
+For """ + group_name + """, should they be given sour water or plain water? Choose carefully! If you give the 
+mouse group the wrong water type, the experiment is a fail and it will end immediately!
+Please enter 'sour' for sour water and 'plain' for plain water: """)
+        #changes type_water input into all lowercase
+        type_water_case = type_water.lower()
+    #if the user typed "sour" and they are trying to give water to the SG group, it will return True
+    if type_water_case == "sour" and group_name == "SG group":
+        right_water = True
+        print("Correct! You can now attempt to give SG group mice sour water.")
+    #if the user typed "plain" and they are trying to give water to the NG group, it will return True
+    elif type_water_case == "plain" and group_name == "NG group":
+        right_water = True
+        print("Correct! You can now attempt to give NG group mice plain water.")
+    #if the user typed the wrong water type for the group presented, it will return False
+    else:
+        right_water = False
+        print("Uh oh! You gave " + group_name + """ mice the wrong type of water! Your experiment has failed 
+and you lost all your funding!
+REMEMBER: SG group (sour water group) gets sour water while NG group (plain water group) gets plain water.""")
+    return right_water
+    
+
+
+def feed_now (group_name):
+    """
+    input: name of mouse group
+    output: Boolean (True or False)
+    
+    Have user guess whether next number rolled will be higher or lower than the previous number rolled. If correct,
+    the mice for that group are fed for the day
+    If fed, function returns True, if not fed, returns False
+    """
+    print("To feed the mice for " + group_name + """, you must guess whether the next number rolled will be 
+higher or lower than the previous. If you are wrong, that group of mice go without food for the day! The 
+numbers range from 1-6.""") 
+    min = 1
+    max = 6
+    print("Rolling dice…")
+    #chooses a random number between 1-6 
+    original_num = random.randint(min, max)
+    print(original_num)
+    num_guess = input("""Will the next number be higher ("H") or lower ("L") than the previous number? Please enter either 'H' or 'L': """)
+    #if user did not enter a valid input, ask for input again
+    while num_guess != "H" and num_guess != "h" and num_guess != "L" and num_guess != "l":
+        print("Please enter a valid option")
+        num_guess = input("""Will the next number be higher ("H") or lower ("L") than the previous number? Please enter either 'H' or 'L': """)
+    print("Rolling dice…")
+    #chooses a random number between 1-6 
+    next_num = random.randint(min, max)
+    print(next_num)
+    #if the number rolled is the same, it will roll a new number until it differs from the original
+    while next_num == original_num:
+        print("Same number… rolling again")
+        #chooses a random number between 1-6 
+        next_num = random.randint(min, max)
+        print(next_num)
+    #if the 2nd rolled number is greater than the first
+    if next_num > original_num:
+        #if the user guess was higher (H or h), it will return True, if user was wrong, it will return False
+        if num_guess == "H" or num_guess == "h":
+            print("""
+Congrats! """ + group_name + """ mice are fed!
+""")
+            fed = True
+        else:
+            print("""
+Sorry! """ + group_name + """ mice were not fed today!
+""")
+            fed = False
+    #if the 2nd rolled number is lower than the first
+    elif next_num < original_num:
+        #if the user guess was lower (L or l), it will return True, if user was wrong, it will return False
+        if num_guess == "L" or num_guess == "l":
+            print("""
+Congrats! """ + group_name + """ mice are fed!
+""")
+            fed = True
+        else:
+            print("""
+Sorry! """ + group_name + """ mice were not fed today!
+""")
+            fed = False
+    return fed
+        
+    
+def water_now (group_name):
+    """
+    input: name of mouse group
+    output: Boolean (True or False)
+    
+    Have user guess whether next number rolled will be higher or lower than the previous number rolled. If correct,
+    the mice for that group are given water for the day
+    If given water, function returns True, if not given water, returns False
+    """
+    print("To give mice water for " + group_name + """, you must guess whether the next number rolled will be 
+higher or lower than the previous. If you are wrong, that group of mice go without water for the day! The 
+numbers range from 1-6.""") 
+    min = 1
+    max = 6
+    print("Rolling dice…")
+    #chooses a random number between 1-6 
+    original_num = random.randint(min, max)
+    print(original_num)
+    num_guess = input("""Will the next number be higher ("H") or lower ("L") than the previous number? Please enter either 'H' or 'L': """)
+    #if user did not enter a valid input, ask for input again
+    while num_guess != "H" and num_guess != "h" and num_guess != "L" and num_guess != "l":
+        print("Please enter a valid option")
+        num_guess = input("""Will the next number be higher ("H") or lower ("L") than the previous number? Please enter either 'H' or 'L': """)
+    print("Rolling dice…")
+    #chooses a random number between 1-6 
+    next_num = random.randint(min, max)
+    print(next_num)
+    #if the number rolled is the same, it will roll a new number until it differs from the original
+    while next_num == original_num:
+        print("Same number… rolling again")
+        #chooses a random number between 1-6 
+        next_num = random.randint(min, max)
+        print(next_num)
+    #if the 2nd rolled number is greater than the first
+    if next_num > original_num:
+        #if the user guess was higher (H or h), it will return True, if user was wrong, it will return False
+        if num_guess == "H" or num_guess == "h":
+            print("""
+Congrats! """ + group_name + """ mice are given water!
+""")
+            drink = True
+        else:
+            print("""
+Sorry! """ + group_name + """ mice were not given water today!
+""")
+            drink = False
+    #if the 2nd rolled number is greater than the first
+    if next_num < original_num:
+        #if the user guess was lower (L or l), it will return True, if user was wrong, it will return False
+        if num_guess == "L" or num_guess == "l":
+            print("""
+Congrats! """ + group_name + """ mice are given water!
+""")
+            drink = True
+        else:
+            print("""
+Sorry! """ + group_name + """ mice were not given water today!
+""")
+            drink = False
+    return drink
+    
+
+def feed_water_test ():
+    """
+    input: none
+    output: string of either A, B, C or "quit"
+    
+    Asks user what they want to do and checks if input is valid
+    Returns choice 
+    """
+    options = input("""Option A - Feed the mice
+Option B - Give mice water
+Option C - Cognitive testing
+Option Q - Quit the Program (lose all progress)
+Please enter "A" or "B" or "C" or "Q": """)
+    #if the user input was not any of the options, asks user for input again
+    while options != "A" and options != "a" and options != "B" and options != "b" and options != "Q" and options != "q" and options != "C" and options != "c":
+        print("Please enter a valid option")
+        options = input("""Option A - Feed the mice
+Option B - Give mice water
+Option C - Cognitive testing
+Option Q - Quit the Program (lose all progress)
+Please enter A" or "B" or "C" or "Q": """)
+    #if input is A, return "A"
+    if options == "A" or options == "a":
+        options = "A"
+    #if input is B, return "B"
+    elif options == "B" or options == "b":
+        options = "B"
+    #if input is C, return "C"
+    elif options == "C" or options == "c":
+        options = "C"
+    #if input is Q, return "quit"
+    else:
+        options = "quit"
+    return options
+
+    
+def just_foodwater (option1, group_list, group_numA, item_numA, group_numB, item_numB, day_num):
+    """
+    input: group_list = list of all groups 
+    option1 = the first option of the day ("A", "B" or "Q")
+    group_numA = integer, maximum list item for option A
+    item_numA = integer, current list item for option A
+    group_numB = integer, maximum list item for option B
+    item_numB = integer, current list item for option B
+    day_num = the current day in the main loop
+    
+    output: a string, 4 Booleans (True or False) for feeding1, water1, feeding2 and water2,  and 2 lists 
+    
+    All options and functions for every possible pathway when choices are just "A", "B" or "Q"
+    If the user does not quit the program, function returns an empty string
+    If user quits the program, the function returns the string "quit"
+    After done a cognitive test, it returns the values in a list 
+    """
+    #if user chose option A first
+    if option1 == "A":
+        #loop will repeat until 2 groups have been attempted to be fed
+        while item_numA < group_numA:
+            feeding = feed_now(group_list[item_numA])
+            #if group being fed is "OSA group" or "SG group", return True or False for "feeding1"
+            if item_numA == 0 or item_numA == 2:
+                feeding1 = feeding
+            #if group being fed is "No OSA group" or "NG group", return True or False for "feeding2"
+            else:
+                feeding2 = feeding
+            item_numA += 1
+        option1a = feed_and_water()
+        #gives menu again if try to feed mice again 
+        while option1a == "A":
+            print("You have already tried to feed the mice.")
+            option1a = feed_and_water()
+        #if user chose option B after option A
+        if option1a == "B":
+            #for day 9 and 10, prompts user to determine the water type for the group prior to giving water
+            if day_num == 9 or day_num == 10:      
+                #loop will repeat until 2 groups have been attempted to beeen attempted to be given water
+                while item_numB < group_numB:
+                    check_water = what_water(group_list[item_numB])
+                    #if user chooses correct water and function returns True
+                    if check_water == True:
+                        water = water_now(group_list[item_numB])
+                        #if group being fed is "SG group", return True or False for water1
+                        if item_numB == 2:
+                            water1 = water
+                        #if group being fed is "NG group", return True or False for water2
+                        else: 
+                            water2 = water
+                        item_numB += 1
+                    #if user got check_water wrong and it returned False, returns strings needed for program to end
+                    else:
+                        options = "quit"
+                        feeding1 = ""
+                        water1 = ""
+                        feeding2 = ""
+                        water2 = ""
+                        return options, feeding1, water1, feeding2, water2
+            #if the day is not 9 or 10
+            else: 
+                #loop will repeat until 2 groups have been attempted to been attempted to be given water
+                while item_numB < group_numB:
+                    water = water_now(group_list[item_numB])
+                    #if group being fed is "OSA group" or "SG group", return True or False for "water1"
+                    if item_numB == 0 or item_numB == 2:
+                        water1 = water
+                    #if group being fed is "No OSA group" or "NG group", return True or False for "water2"
+                    else: 
+                        water2 = water
+                    item_numB += 1
+            #because user did not quit, options is returned as an empty string
+            options = ""
+        #if user chooses to quit, it returns the string "quit" for options and a empty string for the other variables
+        else:
+            options = "quit"
+            feeding1 = ""
+            water1 = ""
+            feeding2 =""
+            water2 =""
+            return options, feeding1, water1, feeding2, water2
+    #if user chose option B first
+    elif option1 == "B":
+        #same code as above for when user chooses option B on day 9 or 10
+        if day_num == 9 or day_num == 10:      
+            while item_numB < group_numB:
+                check_water = what_water(group_list[item_numB])
+                if check_water == True:
+                    water = water_now(group_list[item_numB])
+                    if item_numB == 2:
+                        water1 = water
+                    else: 
+                        water2 = water
+                    item_numB += 1
+                #if user chooses to quit, it returns the string "quit" for options and a empty string for the other variables
+                else:
+                    options = "quit"
+                    feeding1 = ""
+                    water1 = ""
+                    feeding2 =""
+                    water2 =""
+                    return options, feeding1, water1, feeding2, water2
+        #same code as above for when user chooses option B (not day 9 or 10)
+        else:
+            while item_numB < group_numB:
+                water = water_now(group_list[item_numB])
+                if item_numB == 0 or item_numB == 2:
+                    water1 = water
+                else: 
+                    water2 = water
+                item_numB += 1
+        option1b = feed_and_water()
+        #gives menu again if user tries to give mice water again
+        while option1b == "B":
+            print("You have already tried to give the mice water.")
+            option1b = feed_and_water()
+        #if user chooses option A after option B
+        if option1b == "A":
+            #same code as above for when user chooses option A 
+            while item_numA < group_numA:
+                feeding = feed_now(group_list[item_numA])
+                if item_numA == 0 or item_numA == 2:
+                    feeding1 = feeding
+                else:
+                    feeding2 = feeding
+                item_numA += 1
+            options = ""
+        #if user chooses to quit, it returns the string "quit" for options and a empty string for the other variables
+        else:
+            feeding1 = ""
+            water1 = ""
+            feeding2 =""
+            water2 =""
+            options = "quit"
+    #if user chooses to quit, it returns the string "quit" for options and a empty string for the other variables
+    else:
+        feeding1 = ""
+        water1 = ""
+        feeding2 =""
+        water2 =""
+        options = "quit"
+    return options, feeding1, water1, feeding2, water2
+    
+
+def cog_test (day_num, mouse_dict):
+    """
+    input: day number (1 or 5) and dictionary mapping each mouse (in a list) to their group (OSA or No OSA)
+    output: a question printed for that cog test day
+    
+    Note: This will only run for days 1 and 5
+    """
+    #multiple choice questions with their correct answers
+    question1 = """I spy something that could help with the PTFE and saline injections.
+(a) Laptop
+(b) Glass of water
+(c) Needle
+(d) Calculator 
+Please enter the letter of the item that you think helps best in the given scenario: 
+"""
+    correct1 = "c"
+
+    question2 = """I spy something that would help keep time during the cognitive test.
+(a) Calculator
+(b) Stopwatch
+(c) Pencil
+(d) Cat
+"""
+    correct2 = "b"
+
+    question3 = """I spy something that would help calculate the statistical difference between cognitive tests.
+(a) Needle
+(b) Mouse
+(c) Cage
+(d) Calculator
+"""
+    correct3 = "d"
+
+    question4 = """I spy something that would help make water sour.
+(a) Lemon
+(b) Cheese
+(c) Steak
+(d) Cat
+"""
+    correct4 = "a"
+    #empty list for OSA and no OSA cognitive test scores for control trials to be added to 
+    OSA = []
+    no_OSA = []
+    #if it is day 1, ask questions 1 and 2 
+    if day_num == 1:
+        question = mc_question(question1, correct1, "OSA group")
+        #add randomly generated control cognitive test score for each mouse in OSA group to OSA list
+        for mouse in mouse_dict["OSA group"]:
+            add_score = rand_control_score()
+            OSA.append(add_score)
+        second_q = mc_question(question2, correct2, "No OSA group")
+        #add randomly generated control cognitive test score for each mouse in No OSA group to No OSA list
+        for mouse in mouse_dict["No OSA group"]:
+            add_score = rand_control_score()
+            no_OSA.append(add_score)
+    #if it is day 5, ask questions 3 and 4
+    else:
+        third_q = mc_question(question3, correct3, "OSA group")
+        #add randomly generated control cognitive test score for each mouse in OSA group to OSA list
+        for mouse in mouse_dict["OSA group"]:
+            add_score = rand_control_score()
+            OSA.append(add_score)
+        fourth_q = mc_question(question4, correct4, "No OSA group")
+        #add randomly generated control cognitive test score for each mouse in No OSA group to No OSA list
+        for mouse in mouse_dict["No OSA group"]:
+            add_score = rand_control_score()
+            no_OSA.append(add_score) 
+    return OSA, no_OSA
+        
+    
+def foodwatertest (option, group_list, group_numA, item_numA, group_numB, item_numB, day_num, CT_type, mouse_dict):
+    """
+    input: group_list = list of mice groups
+    group_numA = integer, maximum list item for option A
+    item_numA = integer, current list item for option A
+    group_numB = integer, maximum list item for option B
+    item_numB = integer, current list item for option B
+    day_num = the current day in the main loop
+    option = the first option of the day ("A", "B", "C" or "Q")
+    CT_type = whether cognitive test is multiple choice (mc) or game
+    mouse_dict = dictionary with OSA group and No OSA group mice names
+    
+    output: a string with your option, a Boolean for feeding1, water1, feeding2, and water2
+    CT = 2 lists with OSA and No OSA scores
+    
+    All options and functions for every possible pathway when choices are just "A", "B", "C" or "Q"
+    If the user does not quit the program, function returns an empty string
+    If user quits the program, the function returns the string "quit"
+    Returns outcomes of other functions 
+    """
+    #if user chooses option A first
+    if option == "A":
+        #loop will repeat until 2 groups have been attempted to be fed
+        while item_numA < group_numA:
+            feeding = feed_now(group_list[item_numA])
+            #if group being fed is "OSA group" or "SG group", return True or False for "feeding1"
+            if item_numA == 0 or item_numA == 2:
+                feeding1 = feeding
+            #if group being fed is "No OSA group" or "NG group", return True or False for "feeding2"
+            else:
+                feeding2 = feeding
+            item_numA += 1
+        option2a = feed_water_test()
+        #gives menu again if user tries to feed mice again
+        while option2a == "A":
+            print("You have already tried to feed the mice.")
+            option2a = feed_water_test()
+        #if user chooses option B after option A
+        if option2a == "B":
+            #for day 8 and 11, prompts user to determine the water type for the group prior to giving water
+            if day_num == 11 or day_num == 8:      
+                #loop will repeat until 2 groups have been attempted to be given water
+                while item_numB < group_numB:
+                    check_water = what_water(group_list[item_numB])
+                    #if user chooses correct water and function returns True
+                    if check_water == True:
+                        water = water_now(group_list[item_numB])
+                        #if group is SG group, return True or False for water1
+                        if item_numB == 2:
+                            water1 = water
+                        #if group is NG group, return True or False for water2
+                        else:
+                            water2 = water
+                        item_numB += 1
+                    #if user doesn't choose correct water and function returns False, the program quits
+                    else:
+                        options = "quit"
+                        feeding1 = ""
+                        water1 = ""
+                        feeding2 =""
+                        water2 =""
+                        CT = ""
+                        return options, CT, feeding1, water1, feeding2, water2
+            #if day is not 8 or 11
+            else:
+                #loop will repeat until 2 groups have been attempted to be given water
+                while item_numB < group_numB:
+                    water = water_now(group_list[item_numB])
+                    #if group being given water is "OSA group" or "SG group", return True or False for "water1"
+                    if item_numB == 0:
+                        water1 = water
+                    #if group being given water is "No OSA group" or "NG group", return True or False for "water2"
+                    else:
+                        water2 = water
+                    item_numB += 1
+            option2b = feed_water_test()
+            #gives menu again if user tries to fed mice or give them water again
+            while option2b == "A" or option2b == "B":
+                print("You have already tried to feed them and give them water.")
+                option2b = feed_water_test()
+            #if user chooses option A then B then C
+            if option2b == "C":
+                #if day is a multiple choice question cognitive test day
+                if CT_type == "mc":
+                    CT = cog_test(day_num, mouse_dict)
+                #if day is a game question cognitive test day
+                else:
+                    run_test = cog_test_run(day_num)
+                    #since CT returns a list and run_test does not, CT will equal an empty string if it is a game day
+                    CT = " "
+                options = " "
+            #if user chooses to quit, it returns the string "quit" for options and a empty string for the other variables
+            else:
+                options = "quit"
+                feeding1 = ""
+                water1 = ""
+                feeding2 =""
+                water2 =""
+                CT = ""
+                return options, CT, feeding1, water1, feeding2, water2
+        #if user chooses option C after option A
+        elif option2a == "C":
+            if CT_type == "mc":
+                CT = cog_test(day_num, mouse_dict)
+            else:
+                run_test = cog_test_run(day_num)
+                CT = " "
+            option2c = feed_water_test()
+            #gives menu again if user tries to fed mice or give them cognitive testing again
+            while option2c == "C" or option2c == "A":
+                print("You have already tried to feed them and gave them their cognitive test.")
+                option2c = feed_water_test()
+            #if user chooses option A then C then B
+            if option2c == "B":
+                #same code as above for when user chooses option B and when day is 8 or 11
+                if day_num == 11 or day_num == 8:      
+                    while item_numB < group_numB:
+                        check_water = what_water(group_list[item_numB])
+                        if check_water == True:
+                            water = water_now(group_list[item_numB])
+                            if item_numB == 2:
+                                water1 = water
+                            else:
+                                water2 = water
+                            item_numB += 1
+                        #same code as above for when user gets check_water incorrect and it returns False
+                        else:
+                            options = "quit"
+                            feeding1 = ""
+                            water1 = ""
+                            feeding2 =""
+                            water2 =""
+                            CT = ""
+                            return options, CT, feeding1, water1, feeding2, water2
+                #same code as above for when user chooses option B and when day is NOT 8 or 11
+                else:
+                    while item_numB < group_numB:
+                        water = water_now(group_list[item_numB])
+                        if item_numB == 0:
+                            water1 = water
+                        else:
+                            water2 = water
+                        item_numB += 1
+                options = ""
+            #same code as above for when user quits program
+            else:
+                options = "quit"
+                feeding1 = ""
+                water1 = ""
+                feeding2 =""
+                water2 =""
+                CT = ""
+                return options, CT, feeding1, water1, feeding2, water2
+        #same code as above for when user quits program
+        else:
+            options = "quit"
+            feeding1 = ""
+            water1 = ""
+            feeding2 =""
+            water2 =""
+            CT = ""
+            return options, CT, feeding1, water1, feeding2, water2
+    #if user chooses option B first
+    elif option == "B":
+        #same code as above for when user chooses option B and when day is 8 or 11
+        if day_num == 11 or day_num ==8:      
+            while item_numB < group_numB:
+                check_water = what_water(group_list[item_numB])
+                if check_water == True:
+                    water = water_now(group_list[item_numB])
+                    if item_numB == 2:
+                        water1 = water
+                    else:
+                        water2 = water
+                    item_numB += 1
+                #same code as above for when user gets check_water incorrect and it returns False
+                else:
+                    options = "quit"
+                    feeding1 = ""
+                    water1 = ""
+                    feeding2 =""
+                    water2 =""
+                    CT = ""
+                    return options, CT, feeding1, water1, feeding2, water2
+        #same code as above for when user chooses option B and when day is NOT 8 or 11
+        else:
+            while item_numB < group_numB:
+                water = water_now(group_list[item_numB])
+                if item_numB == 0:
+                    water1 = water
+                else:
+                    water2 = water
+                item_numB += 1
+        option2a = feed_water_test()
+        #gives menu again if user tries to give mice water again
+        while option2a == "B":
+            print("You have already tried to give the mice water.")
+            option2a = feed_water_test()
+        #if user chooses option A after option B
+        if option2a == "A":
+            #same code as above for when user chooses option A
+            while item_numA < group_numA:
+                feeding = feed_now(group_list[item_numA])
+                if item_numA == 0 or item_numA == 2:
+                    feeding1 = feeding
+                else:
+                    feeding2 = feeding
+                item_numA += 1
+            option2b = feed_water_test()
+            #gives menu again if user tries to give mice water or try to feed them again
+            while option2b == "A" or option2b == "B":
+                print("You have already tried to feed and give them water.")
+                option2b = feed_water_test()
+            #if user chooses option B then A then C
+            if option2b == "C":
+                #same code as above for when user chooses option C
+                if CT_type == "mc":
+                    CT = cog_test(day_num, mouse_dict)
+                else:
+                    run_test = cog_test_run(day_num)
+                    CT = " "
+                options = ""
+            #same code as above for when user quits program
+            else:
+                options = "quit"
+                feeding1 = ""
+                water1 = ""
+                feeding2 =""
+                water2 =""
+                CT = ""
+                return options, CT, feeding1, water1, feeding2, water2
+        #if user chooses option C after option B
+        elif option2a == "C":
+            #same code as above for when user chooses option C
+            if CT_type == "mc":
+                CT = cog_test(day_num, mouse_dict)
+            else:
+                run_test = cog_test_run(day_num)
+                CT = " "
+            option2c = feed_water_test()
+            #gives menu again if user tries to give mice water or give cognitive test again 
+            while option2c == "C" or option2c == "B":
+                print("You have already tried to give them water and gave them their cognitive test.")
+                option2c = feed_water_test()
+            #if user chooses option B then C then A
+            if option2c == "A":
+                #same code as above for when user chooses option A
+                while item_numA < group_numA:
+                    feeding = feed_now(group_list[item_numA])
+                    if item_numA == 0 or item_numA == 2:
+                        feeding1 = feeding
+                    else:
+                        feeding2 = feeding
+                    item_numA += 1
+                options = ""
+            #same code as above for when user quits program
+            else:
+                options = "quit"
+                feeding1 = ""
+                water1 = ""
+                feeding2 =""
+                water2 =""
+                CT = ""
+                return options, CT, feeding1, water1, feeding2, water2
+        #same code as above for when user quits program
+        else:
+            options = "quit"
+            feeding1 = ""
+            water1 = ""
+            feeding2 =""
+            water2 =""
+            CT = ""
+            return options, CT, feeding1, water1, feeding2, water2
+    #if user chooses option C first
+    elif option == "C":
+        #same code as above for when user chooses option C
+        if CT_type == "mc":
+            CT = cog_test(day_num, mouse_dict)
+        else:
+            run_test = cog_test_run(day_num)
+            CT = " "
+        option2a = feed_water_test()
+        #gives menu again if user tries to give mice cognitive test again 
+        while option2a == "C":
+            print("The mice have already done their cognitive tests today.")
+            option2a = feed_water_test()
+        #if user chooses option A after option C
+        if option2a == "A":
+            #same code as above for when user chooses option A
+            while item_numA < group_numA:
+                feeding = feed_now(group_list[item_numA])
+                if item_numA == 0 or item_numA == 2:
+                    feeding1 = feeding
+                else:
+                    feeding2 = feeding
+                item_numA += 1
+            option2b = feed_water_test()
+            #gives menu again if user tries to give mice cognitive test or feed them again
+            while option2b == "A" or option2b == "C":
+                print("You have already tried to feed them and gave them their cognitive test.")
+                option2b = feed_water_test()
+            #if user chooses option C then A then B
+            if option2b == "B":
+                #same code as above for when user chooses option B and when day is 8 or 11
+                if day_num == 11 or day_num == 8:      
+                    while item_numB < group_numB:
+                        check_water = what_water(group_list[item_numB])
+                        if check_water == True:
+                            water = water_now(group_list[item_numB])
+                            if item_numB == 2:
+                                water1 = water
+                            else:
+                                water2 = water
+                            item_numB += 1
+                        #same code as above for when user gets check_water incorrect and it returns False
+                        else:
+                            options = "quit"
+                            feeding1 = ""
+                            water1 = ""
+                            feeding2 =""
+                            water2 =""
+                            CT = ""
+                            return options, CT, feeding1, water1, feeding2, water2
+                #same code as above for when user chooses option B and when day is NOT 8 or 11
+                else:
+                    while item_numB < group_numB:
+                        water = water_now(group_list[item_numB])
+                        if item_numB == 0:
+                            water1 = water
+                        else:
+                            water2 = water
+                        item_numB += 1
+                options = ""
+            #same code as above for when user quits program
+            else:
+                options = "quit"
+                feeding1 = ""
+                water1 = ""
+                feeding2 =""
+                water2 =""
+                CT = ""
+                return options, CT, feeding1, water1, feeding2, water2
+        #if user chooses option B after option C
+        elif option2a == "B":
+            #same code as above for when user chooses option B and when day is 8 or 11
+            if day_num == 11 or day_num ==8:      
+                while item_numB < group_numB:
+                    check_water = what_water(group_list[item_numB])
+                    if check_water == True:
+                        water = water_now(group_list[item_numB])
+                        if item_numB == 2:
+                            water1 = water
+                        else:
+                            water2 = water
+                        item_numB += 1
+                    #same code as above for when user gets check_water incorrect and it returns False
+                    else:
+                        options = "quit"
+                        feeding1 = ""
+                        water1 = ""
+                        feeding2 =""
+                        water2 =""
+                        CT = ""
+                        return options, CT, feeding1, water1, feeding2, water2
+            #same code as above for when user chooses option B and when day is NOT 8 or 11
+            else:
+                while item_numB < group_numB:
+                    water = water_now(group_list[item_numB])
+                    if item_numB == 0:
+                        water1 = water
+                    else:
+                        water2 = water
+                    item_numB += 1
+            option2c = feed_water_test()
+            #gives menu again if user tries to give mice water or cognitive test again
+            while option2c == "C" or option2c == "B":
+                print("You have already tried to give them water and gave them their cognitive test.")
+                option2c = feed_water_test()
+            #if user chooses option C then B then A
+            if option2c == "A":
+                #same code as above for when user chooses option A
+                while item_numA < group_numA:
+                    feeding = feed_now(group_list[item_numA])
+                    if item_numA == 0 or item_numA == 2:
+                        feeding1 = feeding
+                    else:
+                        feeding2 = feeding
+                    item_numA += 1
+                options = ""
+            #if user chooses option Q, returns the string quit for options and a series of empty strings to end the program
+            else:
+                options = "quit"
+                feeding1 = ""
+                water1 = ""
+                feeding2 =""
+                water2 =""
+                CT = ""
+                return options, CT, feeding1, water1, feeding2, water2
+        #if user chooses option Q, returns the string quit for options and a series of empty strings to end the program
+        else:
+            options = "quit"
+            feeding1 = ""
+            water1 = ""
+            feeding2 =""
+            water2 =""
+            CT = ""
+            return options, CT, feeding1, water1, feeding2, water2
+    #if user chooses option Q, returns the string quit for options and a series of empty strings to end the program
+    else:
+        options = "quit"
+        feeding1 = ""
+        water1 = ""
+        feeding2 =""
+        water2 =""
+        CT = ""
+        return options, CT, feeding1, water1, feeding2, water2
+    return options, CT, feeding1, water1, feeding2, water2
+    
+    
+def d3_options_menu ():
+    """
+    input: none
+    output: string of either A, B, C or "quit"
+    
+    Asks user what they want to do and checks if input is valid
+    Returns choice 
+    """
+    options = input("""Option A - Feed the mice
+Option B - Give mice water
+Option C - PTFE/Saline injections
+Option Q - Quit the Program (lose all progress)
+Please enter "A" or "B" or "C" or "Q": """)
+    #if user did not enter a valid input from options, ask for input again
+    while options != "A" and options != "a" and options != "B" and options != "b" and options != "Q" and options != "q" and options != "C" and options != "c":
+        print("Please enter a valid option")
+        options = input("""Option A - Feed the mice
+Option B - Give mice water
+Option C - PTFE/Saline injections
+Option Q - Quit the Program (lose all progress)
+Please enter A" or "B" or "C" or "Q": """)
+    #if input is A, return "A"
+    if options == "A" or options == "a":
+        options = "A"
+    #if input is B, return "B"
+    elif options == "B" or options == "b":
+        options = "B"
+    #if input is C, return "C"
+    elif options == "C" or options == "c":
+        options = "C"
+    #if input is Q, return "quit"
+    else:
+        options = "quit"
+    return options
+    
+
+def mc_question(q, corr, group_name):
+    """
+    input: question (string sentence), correct answer (string, 1 letter), mouse group name
+    output: String ("incorrect" if corr doesn't match for the corresponding question, " correct" if it does match).
+    """
+    #https://www.codegrepper.com/code-examples/python/how+to+insert+image+in+python
+    #opens image 
+    myImage = Image.open("messy_lab.jpg");
+    myImage.show();
+    print("""
+Today's cognitive test is mainly for establishing proper controls for the experiment. 
+However, before you can do today's cognitive test for """ + group_name + """, you must find something from the 
+image of the messy lab that just opened to help you with your experiment. Answer the following I spy multiple 
+choice to continue with the cognitive test.
+""")
+    question = input(q)
+    #changes response input into all lowercase
+    lower_question = question.lower()
+    #if answer was incorrect, asks user to guess again
+    while lower_question != corr:
+            print("Incorrect. Try again!")
+            question = input(q)
+            lower_question = question.lower()
+    print("""Good job! Now you can conduct the cognitive test!
+
+Generating cognitive test results…
+You can see these scores at the end of the day.""")
+
+    
+def rand_control_score ():
+    """
+    input:none
+    output: random number between 88, 91
+    
+    Note: Used to generate cog score on day 1 and 5 (OSA and no OSA groups). 
+    Only pull these numbers to make sure cog statistics is NOT significant 
+    (otherwise it will show that something besides the water given had an impact on the mice's cog score, which is bad.)
+    """
+    score = random.randint(88, 91)
+    return(score)
+
+
+def type_fast():
+    """
+    input: none
+    output: number (stord in var total_right) and string
+    
+    Add +1 to total_right each time word is typed (and correct) within 3 seconds, and string "Correct".
+    Once word is wrong/ not typed fast enough, output = "Oops" how many were right till this point.
+    """
+    #list of possible words to type in typing game
+    lab_words = [
+ 'needle', 'water maze', 'mice',
+    'cognitive', 'sour water', 'breathing',
+    'saline', 'injections', 'polytetraethylene', 'statistics', 'sleep apnea', 'feeding time'
+]
+    #https://stackoverflow.com/questions/32876110/certain-amount-of-time-to-input-in-python
+
+
+    input("""A word will appear and you will have 3 seconds to properly type that word. If done correctly, 
+another word will appear immediately after and so on. 
+You will need to type at least 4 words in a row properly in order to pass!
+Press any key when you're ready. """)
+    #randomly chooses a word from list
+    word = random.choice(lab_words)
+    #sets start_time to the current timer, 0, and starts the timer
+    start_time = time.time()
+    one = input("You have 3 seconds to type: {}\n".format(word))
+    #number of words in a row user is getting correct
+    total_right = 0
+    #if the time after user puts in input minus 0 is less than 3 and the inputted word is the same as the given word
+    while time.time() - start_time < 3 and one == word:
+        print("Correct!")
+        #if 4 words are typed correctly in a row, returns 4
+        if total_right >= 3:
+            return(total_right)
+        else:
+            #starts timer again and give another random word to type
+            start_time = time.time()
+            word = random.choice(lab_words)
+            one = input("You have 3 seconds to type: {}\n".format(word))
+            total_right += 1
+    #if user gets word wrong or doesn't type it fast enough and the total words they got right is less than 4  
+    if total_right < 3: 
+        print("Oops!")
+    return(total_right)
+
+            
+def blink_once(the_sent):
+    """
+    input: string (of words)
+    output: None
+    
+    Function to blink input for a specific amount of time
+    """
+    #https://stackoverflow.com/questions/49011150/how-to-make-a-string-blink-for-a-specified-time-using-the-colored-function-in-th
+    sent = sys.stdout.write(the_sent)
+    #sentence blinks at 0.35 seconds at a time 
+    time.sleep(0.35)
+    #makes line blank to create flashing appearance
+    sys.stdout.write('\r                                                                                                              ')
+    time.sleep(0.35)
+
+def blink(number, the_sent):
+    """
+    input: max number of times to blink, string (of words)
+    output: None
+    
+    Function to blink the_sent for a given number times.
+    """
+    #https://stackoverflow.com/questions/49011150/how-to-make-a-string-blink-for-a-specified-time-using-the-colored-function-in-th
+    #indicates the number of times the sentence is blinked 
+    for x in range(0,number):
+        blink_once(the_sent)
+
+        
+def get_cog_testscores (CT_list, file, exp_group):
+    """
+    input: Cognitive test of each mouse (list),  csv file (opened, to read), name of group (string)
+    output: None
+    
+    Function that appends a random value from the selected csv file to the given CT list.
+    """
+    counting = 0 
+    for row in file:
+        #if the group user is getting cognitive scores for is SG and the row number is between 6 and 10
+        if exp_group == "SG" and 6 <= counting <= 10:
+            #get random item from that row and add it to the given list as an integer
+            row = row.split()
+            rand_val = random.randint(1,5)
+            value = row[rand_val]
+            value = value.strip(",")
+            value = int(value)
+            CT_list.append(value)
+            counting +=1
+        #if the group user is getting cognitive scores for is NG and the row number is between 11 and 15
+        elif exp_group == "NG" and 11 <= counting <= 15:
+            #get random item from that row and add it to the given list as an integer
+            row = row.split()
+            rand_val = random.randint(1,5)
+            value = row[rand_val]
+            value = value.strip(",")
+            value = int(value)
+            CT_list.append(value)
+            counting +=1
+        #if row number is not 6-15, add 1 to counting
+        else: 
+            counting +=1
+
+    
+def check_num_right (CT_list, group_type, num_right):
+    """
+    input: Cognitive test of each mouse (list), name of group (string), correct number of words typed (number)
+    output: None
+    
+    Function pulls a csv file based on value of (num_right)
+    Note: num_right is number of words typed correctly (determined from function cog_test_sent_typing)
+    """
+    #if user typed 4 or less words correctly
+    if num_right <= 4:
+        #get cognitive scores from csv file with lower cognitive scores
+        csv_file = open("CT_low_scores.csv", "r")
+        scoring = get_cog_testscores(CT_list, csv_file, group_type)
+        csv_file.close()
+    #if user typed between 5 to 8 words correctly
+    elif 5 <= num_right <= 8:
+        #get cognitive scores from csv file with medium cognitive scores
+        csv_file = open("CT_med_scores.csv", "r")
+        scoring = get_cog_testscores(CT_list, csv_file, group_type)
+        csv_file.close()
+    #if user typed greater than 8 words correctly
+    else:
+        #get cognitive scores from csv file with high cognitive scores
+        csv_file = open("CT_high_scores.csv", "r")
+        scoring = get_cog_testscores(CT_list, csv_file, group_type)
+        csv_file.close()
+        
+        
+def cog_test_sent_typing ():  
+    """
+    input: None
+    output: number (stored in num_right)
+    
+    Function counts how many words user inputs that is correct (in order) from a string set (the_sent).
+    """
+    #list of possible sentences to type in sentence blinking game
+    blink_sent = ['\rThe mouse began swimming in a pool of water while trying to find a hidden platform.',
+             '\rSaline injections are injected in place of PTFE to ensure lack of injection effect on cognition',
+             '\rCitric acid is very sour, we better hope that the mice will still drink the sour water!',
+             '\rWill I be a successful scientist and not waste the funding that was given to me for this lab?',
+             "\rIt is very sad when experimental mice die, it can affect the data so I hope it does not occur",
+             '\rThe mice are sleeping safe and sound in their cages with a full belly of water.',
+             '\rStatistical results of cognitive tests will be compared at the end of the entire lab.',
+             '\rThe findings of this research can be eventually applied to human sleep apnea patients.',
+             "\rSleep apnea is a major risk for Alzheimer's Disease, so this research is very important!"]
+
+    #picks random sentence from blink_sent 
+    list_rand = random.randint(0,8)
+    #the_sent = random phrase selected form blink_sent (to be blinked)
+    the_sent = blink_sent[list_rand]
+    ready = input("Press any key when you're ready!")
+    blink(2, the_sent)
+    num_right = 0
+    #splits the random sentence into individual words
+    splitted = the_sent.split()
+    the_guess = input("""
+    Write out however much of the sentence you remember: """)
+    #splits the inputted string into individual words
+    guess_split = the_guess.split()
+    #checks each word in inputted sentence if it matches with the original random sentence
+    for i in range(0, len(guess_split), 1):
+        if guess_split[i] == splitted[i]:
+            num_right += 1
+        else:
+            #if the inputted word does not match the word in the original sentence, end function and return number of words right
+            break  
+    return(num_right)
+    
+              
+def cog_test_run(day):
+    print("""The cognitive test for the mice is a memory test so you will be doing a memory test as well
+to help determine the mice cognitive test scores.
+
+A sentence will flash twice and you will have to remember and type as much of the sentence as you can right after.
+Remember, spelling and punctuation counts!
+""")
+    #if day is 8, get cognitive test scores for SG and NG groups for Cognitive Test #4 
+    if day == 8:
+        for i in range (0, 2, 1):
+            the_test = cog_test_sent_typing()
+            if i == 0:
+                add_scores = check_num_right(CT4_SG, "SG", the_test)
+            else:
+                add_scores = check_num_right(CT4_NG, "NG", the_test)
+            print("Generating cognitive scores… You can see these scores at the end of the day.")
+    #if day is 11, get cognitive test scores for SG and NG groups for Cognitive Test #5
+    else:
+        for i in range (0, 2, 1):
+            the_test = cog_test_sent_typing()
+            if i == 0:
+                add_scores = check_num_right(CT5_SG, "SG", the_test)
+            else:
+                add_scores = check_num_right(CT5_NG, "NG", the_test)
+            print("Generating cognitive scores… You can see these scores at the end of the day.")
+
+
+def RM_stats (group_name, mouse_dict, CT_type1, CT_type2, list1, list2, dead_list, graph_num):
+    #https://www.statology.org/repeated-measures-anova-python/
+    #list of all mice in given group name
+    alive_mice = mouse_dict[group_name]
+    #goes through each mouse in dead mice list
+    for mouse in dead_list:
+        #if dead mouse is in the given group name
+        if mouse in alive_mice:
+            #find item number of dead mouse in the alive mice 
+            num_dead = alive_mice.index(mouse)
+            #remove dead mouse from alive mice list
+            alive_mice.remove(mouse)
+            #remove dead mouse cognitive test score from the given lists
+            list1.remove(list1[num_dead])
+            list2.remove(list2[num_dead])
+    #add cognitive test scores for the given lists together into 1 large list
+    sum_list = list1 + list2
+
+    #sets data up for statistical analysis by pingouin
+    df = pd.DataFrame({'Mouse': pd.array(alive_mice*2),      #repeats alive mice names twice (e.g. Mouse 1, Mouse 2, Mouse 1, Mouse 2)
+                       'Test': np.repeat([CT_type1, CT_type2], len(alive_mice)),      #repeats cognitive test number (e.g. CT1, CT1, CT2, CT2)
+                       'Score': sum_list})     #list of cognitive test scores
+    print(df)
+    #perform the repeated measures ANOVA
+    aov = pg.rm_anova(dv='Score', within=['Test'], subject='Mouse', data=df)
+    print(aov)
+    #if it is the first statistical analysis
+    if graph_num == 0:
+        #change figure size 
+        plt.figure(figsize=(15, 7.5))
+        plt.plot(alive_mice, list1, marker='.', color='gold', label = "OSA group CT1")
+        plt.plot(alive_mice, list2, marker='.', color='aquamarine', label = "OSA group CT2")
+        plt.xlabel("Mouse names")
+        plt.ylabel("Cognitive scores")
+        plt.title("Cognitive scores for each mouse in OSA group for CT1 and CT2", fontsize = 20)
+        #add legend
+        plt.legend()
+        #show graph
+        plt.show()
+    #if it is the second repeated measures analysis conducted
+    else:
+        #change figure size 
+        plt.figure(figsize=(15, 7.5))
+        plt.plot(alive_mice, list1, marker='.', color='royalblue', label = "No OSA group CT1")
+        plt.plot(alive_mice, list2, marker='.', color='forestgreen', label = "No OSA group CT3")
+        plt.xlabel("Mouse names")
+        plt.ylabel("Cognitive scores")
+        plt.title("Cognitive scores for each mouse in No OSA group for CT1 and CT3", fontsize = 20)
+        #add legend 
+        plt.legend()
+        #show graph
+        plt.show()
+    #get the p-value from the anova calculation and change it into a string
+    a = str(aov["p-unc"])
+    #split p-value into its components
+    words = a.split()
+    #get second component from p-value 
+    b = words[1]
+    #if the p-value is less than 0.05, the comparison is significant and if it is greater than 0.05, it is insignificant
+    if float(b) < float(0.05):
+        print("The comparison is significant with a p-value of: " + str(b))
+    else:
+        print("The comparison is not significant with a p-value of: " + str(b))
+
+
+def display_cogtest (day_num, list1, list2, list3, list4, list5, list6, list7, list8, mouse_dict, mouse_dict1, dead_mice):
+    
+    if day_num == 0:
+        print("You have not done any cognitive testing yet.")
+    #if only 1 set of cognitive tests have been done
+    elif day_num == 1 or day_num == 2 or day_num == 3 or day_num == 4:
+        dict1 = {}
+        dict2 = {}
+        #checks if mouse not in dead mice list before mapping the mouse name to given cognitive test score
+        #if mouse is in dead mice list, skips mouse and score
+        for mouse in mouse_dict["OSA group"]:
+            if mouse not in dead_mice:
+                dict1[mouse] = list1[mouse_dict["OSA group"].index(mouse)]
+        for mouse in mouse_dict["No OSA group"]:
+            if mouse not in dead_mice:
+                dict2[mouse] = list2[mouse_dict["No OSA group"].index(mouse)]
+        #print cognitive scores with the corresponding mouse name for all sets of completed cognitive tests
+        print("Cognitive test #1 for OSA group: ")
+        for i in dict1:
+            print("", i , "'s score is ", dict1[i])
+        print("")
+        print("Cognitive test #1 for No OSA group: ")
+        for i in dict2:   
+            print("", i , "'s score is ", dict2[i])
+    elif day_num == 5 or day_num == 6 or day_num == 7:
+        #make dictionary that maps mice to their score, for each corresponding cog test
+        dict1 = {}
+        dict2 = {}
+        dict3 = {}
+        dict4 = {}
+        #checks if mouse not in dead mice list before mapping the mouse name to given cognitive test score
+        #if mouse is in dead mice list, skips mouse and score
+        for mouse in mouse_dict["OSA group"]:
+            if mouse not in dead_mice:
+                dict1[mouse] = list1[mouse_dict["OSA group"].index(mouse)]
+                dict3[mouse] = list3[mouse_dict["OSA group"].index(mouse)]
+        for mouse in mouse_dict["No OSA group"]:
+            if mouse not in dead_mice:
+                dict2[mouse] = list2[mouse_dict["No OSA group"].index(mouse)]
+                dict4[mouse] = list4[mouse_dict["No OSA group"].index(mouse)]
+        #print cognitive scores with the corresponding mouse name for all sets of completed cognitive tests
+        print("Cognitive test #1 for OSA group: ")
+        for i in dict1:
+            print("", i , "'s score is ", dict1[i])
+        print("")
+        print("Cognitive test #1 for No OSA group: ")
+        for i in dict2:
+            print("", i , "'s score is ", dict2[i])
+        print("")
+        print("Cognitive test #2 for OSA group: ")
+        for i in dict3:
+            print("", i , "'s score is ", dict3[i])
+        print("")
+        print("Cognitive test #3 for No OSA group: ")
+        for i in dict4:
+            print("", i , "'s score is ", dict4[i])
+    elif day_num == 8 or day_num == 9 or day_num == 10:
+        #make dictionary that maps mice to their score, for each corresponding cog test
+        dict1 = {}
+        dict2 = {}
+        dict3 = {}
+        dict4 = {}
+        dict5 = {}
+        dict6 = {}
+        #checks if mouse not in dead mice list before mapping the mouse name to given cognitive test score
+        #if mouse is in dead mice list, skips mouse and score
+        for mouse in mouse_dict["OSA group"]:
+            if mouse not in dead_mice:
+                dict1[mouse] = list1[mouse_dict["OSA group"].index(mouse)]
+                dict3[mouse] = list3[mouse_dict["OSA group"].index(mouse)]
+        for mouse in mouse_dict["No OSA group"]:
+            if mouse not in dead_mice:
+                dict2[mouse] = list2[mouse_dict["No OSA group"].index(mouse)]
+                dict4[mouse] = list4[mouse_dict["No OSA group"].index(mouse)]
+        for mouse in mouse_dict1["SG group"]:
+            if mouse not in dead_mice:
+                dict5[mouse] = list5[mouse_dict1["SG group"].index(mouse)]
+        for mouse in mouse_dict1["NG group"]:
+            if mouse not in dead_mice:
+                dict6[mouse] = list6[mouse_dict1["NG group"].index(mouse)]
+        #print cognitive scores with the corresponding mouse name for all sets of completed cognitive tests
+        print("Cognitive test #1 for OSA group: ")
+        for i in dict1:
+            print("", i , "'s score is ", dict1[i])
+        print("")
+        print("Cognitive test #1 for No OSA group: ")
+        for i in dict2:
+            print("", i , "'s score is ", dict2[i])
+        print("")
+        print("Cognitive test #2 for OSA group: ")
+        for i in dict3:
+            print("", i , "'s score is ", dict3[i])
+        print("")
+        print("Cognitive test #3 for No OSA group: ")
+        for i in dict4:
+            print("", i , "'s score is ", dict4[i])
+        print("")
+        print("Cognitive test #4 for SG group: ")
+        for i in dict5:
+            print("", i , "'s score is ", dict5[i])
+        print("")
+        print("Cognitive test #4 for NG group: ")
+        for i in dict6:
+            print("", i , "'s score is ", dict6[i])     
+    else:
+        #make dictionary that maps mice to their score, for each corresponding cog test
+        dict1 = {}
+        dict2 = {}
+        dict3 = {}
+        dict4 = {}
+        dict5 = {}
+        dict6 = {}
+        dict7 = {}
+        dict8 = {}
+        #checks if mouse not in dead mice list before mapping the mouse name to given cognitive test score
+        #if mouse is in dead mice list, skips mouse and score
+        for mouse in mouse_dict["OSA group"]:
+            if mouse not in dead_mice:
+                dict1[mouse] = list1[mouse_dict["OSA group"].index(mouse)]
+                dict3[mouse] = list3[mouse_dict["OSA group"].index(mouse)]
+        for mouse in mouse_dict["No OSA group"]:
+            if mouse not in dead_mice:
+                dict2[mouse] = list2[mouse_dict["No OSA group"].index(mouse)]
+                dict4[mouse] = list4[mouse_dict["No OSA group"].index(mouse)]
+        for mouse in mouse_dict1["SG group"]:
+            if mouse not in dead_mice:
+                dict5[mouse] = list5[mouse_dict1["SG group"].index(mouse)]
+                dict7[mouse] = list7[mouse_dict1["SG group"].index(mouse)]
+        for mouse in mouse_dict1["NG group"]:
+            if mouse not in dead_mice:
+                dict6[mouse] = list6[mouse_dict1["NG group"].index(mouse)]
+                dict8[mouse] = list8[mouse_dict1["NG group"].index(mouse)]
+        #print cognitive scores with the corresponding mouse name for all sets of completed cognitive tests
+        print("Cognitive test #1 for OSA group: ")
+        for i in dict1:
+            print("", i , "'s score is ", dict1[i])
+        print("")
+        print("Cognitive test #1 for No OSA group: ")
+        for i in dict2:
+            print("", i , "'s score is ", dict2[i])
+        print("")
+        print("Cognitive test #2 for OSA group: ")
+        for i in dict3:
+            print("", i , "'s score is ", dict3[i])
+        print("")
+        print("Cognitive test #3 for No OSA group: ")
+        print("")
+        for i in dict4:
+            print("", i , "'s score is ", dict4[i])
+        print("")
+        print("Cognitive test #4 for SG group: ")
+        for i in dict5:
+            print("", i , "'s score is ", dict5[i])
+        print("")
+        print("Cognitive test #4 for NG group: ")
+        for i in dict6:
+            print("", i , "'s score is ", dict6[i])
+        print("")
+        print("Cognitive test #5 for SG group: ")
+        for i in dict7:
+            print("", i , "'s score is ", dict7[i])
+        print("")
+        print("Cognitive test #5 for NG group: ")
+        for i in dict8:
+            print("", i , "'s score is ", dict8[i])          
+        
+        
+def experiment_menu(day_num, mouse_dict, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice):
+    
+    #loop will continue to run as long as this is True
+    keep_going = True
+    while keep_going:
+        #menu presented at the end of each day
+        print ("")
+        print ("---END OF DAY MENU---")
+        print ("N - See Current Mice Health bar")
+        print ("R - See Current Cognitive Test Results")
+        print ("D - Go to next day")
+        print ("Q - Quit Experiment")
+        user_input = input("Please select a menu option: ")
+        #if user did not enter a valid input from options, ask for input again
+        if user_input != 'N' and user_input != 'n' and user_input != 'R' and user_input != 'r' and user_input != 'Q' and user_input != 'q' and user_input != 'D' and user_input != 'd':
+            print ("")
+            print ("Error: Please select a valid menu option.")
+        #if user chooses option N
+        elif user_input == "N" or user_input == "n":
+            #if day is less than 7, present option to see health bars for OSA or No OSA groups
+            if day_num < 7:
+                name = input("Which mice group's health would you like to see? " +
+""" A = OSA group, B = No OSA group""")
+                #if user did not enter a valid input from options, ask for input again
+                while name != "A" and name != "a" and name != "B" and name != "b":
+                    print("Please input a valid input")
+                    name = input("Which mice group's health would you like to see? " +
+""" A = OSA group, B = No OSA group""")
+                #if user chooses option A, present all mice health bars for OSA group
+                if name == "A" or name == "a":
+                    get_health(mouse_dict["OSA group"], food1, water1)
+                #if user chooses option B, present all mice health bars for No OSA group
+                else:
+                    get_health(mouse_dict["No OSA group"], food2, water2)
+            #if day is greater than or equal to 7, present option to see health bars for SG or NG groups
+            else:
+                name = input("Which mice group's health would you like to see? " +
+""" A = SG group, B = NG group""")
+                #if user did not enter a valid input from options, ask for input again
+                while name != "A" and name != "a" and name != "B" and name != "b":
+                    print("Please input a valid input")
+                    name = input("Which mice group's health would you like to see? " +
+""" A = SG group, B = NG group""")
+                #if user chooses option A, present all mice health bars for SG group
+                if name == "A" or name == "a":
+                    get_health(mouse_dict["SG group"], food1, water1)
+                #if user chooses option B, present all mice health bars for NG group
+                else:
+                    get_health(mouse_dict["NG group"], food2, water2)
+            #if user did not quit, function will return an empty string
+            quitting = ""
+        #if user chooses option R
+        elif user_input == "R" or user_input == "r":
+            display_cogtest(day_num, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+            #if user did not quit, function will return an empty string
+            quitting = ""
+        #if user chooses option D
+        elif user_input == "D" or user_input == 'd':
+            #change conditions so loop cannot run again and move onto the next day
+            keep_going = False
+            #if user did not quit, function will return an empty string
+            quitting = ""
+        #if user chooses option Q
+        else:
+            #return string quit if quit the game to end the program
+            quitting = "quit"
+            #change conditions so loop cannot run again
+            keep_going = False
+    return quitting
+        
+
+def check_dead_mice(dead_mice_list, split_group, mouse_group):
+    #counter of number of dead in each group
+    OSA_count = 0
+    SG_count = 0
+    NG_count = 0
+    NoOSA_count = 0
+    #checks which group each dead mouse is in and adds 1 to that groups total dead mice count
+    for i in dead_mice_list:
+        if i in split_group["SG group"]:
+            SG_count +=1
+        elif i in split_group["NG group"]:
+            NG_count += 1
+        elif i in mouse_group["OSA group"]:
+            OSA_count+=1
+        else:
+            NoOSA_count +=1
+    #if there is less than 2 mice in a group, function returns string quit to end the program
+    if NoOSA_count >= 4 or SG_count >=4 or NG_count >= 4 or OSA_count >= 9:
+        print("""Oh no! Too many mice have died! Your experiment can't continue!
+Try to feed and give water to your mice better next time!""")
+        quit = "quit"
+    #if there is at least 2 mice per group, function returns an empty string and game can continue
+    else:
+        quit = ""
+    return quit
+        
+
+def md_anova(group_name1, group_name2, mouse_dict, CT_type1, CT_type2, list1, list2, list3, list4, dead_mice):
+    #https://pingouin-stats.org/generated/pingouin.mixed_anova.html
+    #change name of lists
+    first = list1
+    second = list2
+    third = list3
+    fourth = list4
+    #list of mice names in given group names
+    alive_mice1 = mouse_dict[group_name1]
+    alive_mice2 = mouse_dict[group_name2]
+    for mouse in dead_mice:
+        #check if each mouse in dead mice list is in list of all mice in given group
+        if mouse in alive_mice1:
+            #if dead mouse in group, find mouse item number in given group of mice
+            num_dead = alive_mice1.index(mouse)
+            #remove dead mouse from alive mice list
+            alive_mice1.remove(mouse)
+            #remove dead mouse cognitive test score from the given lists
+            first.remove(first[num_dead])
+            third.remove(third[num_dead])
+        #check if each mouse in dead mice list is in list of all mice in given group
+        elif mouse in alive_mice2:
+            #if dead mouse in group, find mouse item number in given group of mice
+            num_dead = alive_mice2.index(mouse)
+            #remove dead mouse from alive mice list
+            alive_mice2.remove(mouse)
+            #remove dead mouse cognitive test score from the given lists
+            second.remove(second[num_dead])
+            fourth.remove(fourth[num_dead])
+    
+    #sum of all cognitive scores into a long list
+    sum_list = first + second + third + fourth     
+    
+    #sum of all alive mice names
+    mouse_names_sum = alive_mice1 + alive_mice2
+    
+    #get length of alive mice lists
+    length1 = len(alive_mice1)
+    length2 = len(alive_mice2)
+    #sets data up for statistical analysis by pingouin
+    df = pd.DataFrame({'Mouse': np.array(mouse_names_sum*2),     #repeat mice names twice (e.g. Mouse 1, Mouse 2, Mouse 1, Mouse 2)
+                       'Test': np.repeat([CT_type1, CT_type2], [(length1*2), (length2*2)]),     #repeat cognitive test number twice depending on length of alive mice list (e.g. CT4, CT4, CT4, CT5, CT5)
+                       'Group': np.repeat(["SG", "NG", "SG", "NG"], [len(first), len(second),     #repeat mice group type according to length of each list (e.g. SG, SG, NG, NG, NG, SG, SG, NG, NG)
+                                                                     len(third), len(fourth)]),
+                       'Score': sum_list})     #list with all cognitive test scores for anova
+    #list of mice names, test type, group type and scores in the format in the dataframe 
+    mouse = df["Mouse"]
+    test = df["Test"]
+    group = df["Group"]
+    score = df["Score"]
+    #run mixed-design anova
+    print("")
+    anova = pg.mixed_anova(dv='Score', within='Test', between='Group', subject='Mouse', data=df)
+    print(anova)
+    
+    #change figure size
+    plt.figure(figsize=(15, 7.5))
+    plt.plot(alive_mice1, list1, marker='.', color='skyblue', label = "SG group CT4")
+    plt.plot(alive_mice1, list3, marker='.', color='purple', label = "SG group CT5")
+    plt.xlabel("Mouse names")
+    plt.ylabel("Cognitive scores")
+    plt.title("Cognitive scores for each mouse in SG group for CT4 and CT5", fontsize = 20)
+    #add legend 
+    plt.legend()
+    #show graph
+    plt.show()
+    
+    #change figure size
+    plt.figure(figsize=(15, 7.5))
+    plt.plot(alive_mice2, list2, marker='.', color='green', label = "NG group CT4")
+    plt.plot(alive_mice2, list4, marker='.', color='red', label = "NG group CT5")
+    plt.xlabel("Mouse names")
+    plt.ylabel("Cognitive scores")
+    plt.title("Cognitive scores for each mouse in NG group for CT4 and CT5", fontsize = 20)
+    #add legend 
+    plt.legend()
+    #show graph
+    plt.show()
+    #get p-value from mixed-design anova
+    a = str(anova["p-unc"])
+    
+    #split p-value into its individual components, there will be 3 p-values
+    words = a.split()
+    
+    #list for p-values
+    list_b = []
+    #add the 3 p-values to list
+    for i in range(1, 6, 2):
+        b = words[i]
+        list_b.append(b)
+
+    #list for adding whether p-values were significant
+    is_sig = []
+    for item in list_b:
+        #if the p-value is less than 0.05, the comparison is significant
+        if float(item) < float(0.05):
+            print("")
+            print("The comparison is significant with a p-value of: " + str(item))
+            #add word "sig" to is_sig list
+            is_sig.append("sig")
+        #if the p-value is larger than 0.05, the comparison is insignificant 
+        else:
+            print("")
+            print("The comparison is not significant with a p-value of: " + str(item))
+            #add word "insig" to is_sig list
+            is_sig.append("insig")
+
+    #If interaction is significant, conduct within-subjects simple effects
+    if is_sig[2] == "sig":
+        #Before vs. After @ SG
+        #Before vs. After @ NG
+        print("There is an interaction between Group type and Test type")
+        #checks if cognitive test scores between different tests in same group are the exact same 
+        total_equal1 = 0
+        for j in range(0, len(first), 1):
+            #if the cognitive test score is the same, add 1 to total
+            if first[j] == third[j]:
+                total_equal1 += 1
+        total_equal2 = 0
+        for k in range(0,len(second),1):
+            #if the cognitive test score is the same, add 1 to total
+            if second[k] == fourth[k]:
+                total_equal2 += 1
+        #if all the scores in a group are the exact same, end function 
+        if total_equal1 == len(first) or total_equal2 == len(second):
+            result = print("The scores for one of these groups are the same regardless of test and statistical analysis cannot be run.")
+            return result
+        #if cognitive scores between tests in same group are different
+        else:
+            #empty list for adding mice names, test type and score for SG and NG groups individually
+            SG_Mouse = []
+            NG_Mouse = []
+            SG_Test1 = []
+            NG_Test2 = []
+            SG_Score = []
+            NG_Score = []
+            for i in range(0, len(mouse), 1):
+                mice_num = mouse[i]
+                score_num = score[i]
+                #if i is a SG group score
+                if i < (len(mouse_dict["SG group"])) or ((len(mouse_dict["SG group"])) + (len(mouse_dict["NG group"]))-1) < i < ((len(mouse)) - (len(mouse_dict["NG group"]))):
+                    #add SG mice names to SG_mouse list and SG mice scores to SG_Score
+                    SG_Mouse.append(mice_num)
+                    SG_Score.append(score_num)
+                    #if i is a SG group score and CT4
+                    if i < len(mouse_dict["SG group"]):
+                        SG_Test1.append("CT4")
+                    #if i is a SG group score and CT5
+                    else:
+                        SG_Test1.append("CT5")
+                #if i is a NG group score
+                else:
+                    #add NG mice names to NG_mouse list and NG mice scores to NG_Score
+                    NG_Mouse.append(mice_num)
+                    NG_Score.append(score_num)
+                    #if i is a NG group score and CT4
+                    if (len(mouse_dict["SG group"])-1) < i < (len(mouse_dict["NG group"]) + (len(mouse_dict["SG group"]))):
+                        NG_Test2.append("CT4")
+                    #if i is a NG group score and CT5
+                    else:
+                        NG_Test2.append("CT5")
+            
+            #sets data up for statistical analysis by pingouin
+            sg = pd.DataFrame({"within_Mouse": SG_Mouse, "within_Test": SG_Test1, "within_Score": SG_Score})
+            print(sg)
+            print("")
+            #conduct repeated measures anova for SG group
+            within1 = pg.rm_anova(dv='within_Score', within=['within_Test'], subject='within_Mouse', data=sg)
+            print(within1)
+            #get p-value 
+            a1 = str(within1["p-unc"])
+            words1 = a1.split()
+            b1 = words1[1]
+            #if the p-value is less than 0.05, the comparison is significant 
+            if float(b1) < float(0.05):
+                print("")
+                print("The comparison is significant with a p-value of: " + str(b1))
+                result = ("""There is a significant difference between Test time for SG. This means that there is a 
+    significant difference before and after sour water administration in SG group.""")
+                print(result)
+            #if the p-value is greater than 0.05, the comparison is insignificant 
+            else:
+                print("")
+                print("The comparison is not significant with a p-value of: " + str(b1))
+                result = ("""There is no significant difference between Test time for SG. This means that there is no
+    significant difference before and after sour water administration in SG group.""")
+                print(result)
+            #sets data up for statistical analysis by pingouin
+            ng = pd.DataFrame({"within_Mouse": NG_Mouse, "within_Test": NG_Test2, "within_Score": NG_Score})
+            print(ng)
+            print("")
+            #conduct repeated measures anova for NG group
+            within2 = pg.rm_anova(dv='within_Score', within=['within_Test'], subject='within_Mouse', data=ng)
+            print(within2)
+            #get p-value 
+            a2 = str(within2["p-unc"])
+            words2 = a2.split()
+            b2 = words2[1]
+            #if the p-value is less than 0.05, the comparison is significant 
+            if float(b2) < float(0.05):
+                print("")
+                print("The comparison is significant with a p-value of: " + str(b2))
+                result = ("""There is a significant difference between Test time for NG. This means that there is a 
+    significant difference before and after plain water administration in NG group.""")
+                print(result)
+            #if the p-value is greater than 0.05, the comparison is insignificant 
+            else:
+                print("")
+                print("The comparison is not significant with a p-value of: " + str(b2))
+                result = ("""There is no significant difference between Test time for NG. This means that there is no
+    significant difference before and after plain water administration in NG group.""")
+                print(result)
+    #if interaction was not significant
+    else:
+        #if test time and group time was significant
+        if is_sig[0] == "sig" and is_sig[1] == "sig":
+            print("")
+            result = ("""There is a main effect of Test time and Group type. This means that there is a 
+significant difference before and after cognitive scores for the SG and NG groups""")
+            print(result)
+        #if only test time was significant
+        elif is_sig[0] == "sig":
+            print("")
+            result = ("""There is main effect of Test time but no main effect of Group type. This means that 
+there is a significant difference in cognitive scores before and after treatment but no difference
+between SG and NG groups.""")
+            print(result)
+        #if only group type was significant
+        elif is_sig[1] == "sig":
+            print("")
+            result = ("""There is main effect of Group type but no main effect of Test time. This means that
+there is a significant diffeerence in cognitive scores between SG and NG groups but not before and after 
+intervention""")
+            print(result)
+        #if nothing was significant
+        else:
+            print("")
+            result =("""There is no main effect for Group type, Test time or Interaction. This means that
+there is no significant difference in cognitive scores between SG and NG groups nor before and after 
+intervention.""")
+            print(result)
+    return result
+    
+    
+def add_words(day_num, mad_libs):
+    #https://pythonexamples.org/python-replace-string-in-file/
+    #mad libs question for each day
+    #maps mad libs prompt to user inputted word in dictionary
+    #depending on the day, the user will be prompted with a specific mad libs game
+    if day_num == 0:
+        location = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random LOCATION: """)
+        mad_libs["location"] = location 
+    elif day_num == 1:
+        animal = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random ANIMAL: """)
+        mad_libs["animal"] = animal
+    elif day_num == 2:
+        item = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random ITEM: """)
+        mad_libs["item"] = item
+    elif day_num == 3:
+        adjective = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random ADJECTIVE: """)
+        mad_libs["adjective"] = adjective
+    elif day_num == 4:
+        emotion = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random EMOTION: """)
+        mad_libs["emotion"] = emotion
+    elif day_num == 5:
+        adverb = input("""At the end of each day, you are to take some notes on the progress
+of your expeirment for the paper you must write later. For today, please input a 
+random ADVERB: """)
+        mad_libs["adverb"] = adverb
+    elif day_num == 6:
+        verb = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random VERB ENDING IN -ING: """)
+        mad_libs["verb"] = verb
+    elif day_num == 7:
+        verb1 = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random VERB ENDING IN -ING: """)
+        mad_libs["verb1"] = verb1
+    elif day_num == 8:
+        celebrity = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random CELEBRITY: """)
+        mad_libs["celebrity"] = celebrity
+    elif day_num == 9:
+        food = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random FOOD: """)
+        mad_libs["food"] = food
+    elif day_num == 10:
+        noun = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random NOUN: """)
+        mad_libs["noun"] = noun
+    elif day_num == 11:
+        adverb1 = input("""
+At the end of each day, you are to take some notes on the progress
+of your experiment for the paper you must write later. For today, please input a 
+random ADVERB: """)
+        mad_libs["adverb1"] = adverb1    
+        
+    
+#Empty lists to hold scores for each corresponding cog test (for each mouse)    
+CT1_OSA = []  
+CT1_NoOSA = []
+CT2_OSA = []
+CT3_NoOSA = []
+CT4_SG = []
+CT4_NG = []
+CT5_SG = []
+CT5_NG = []
+#list of all names of dead mice
+dead_mice = []
+#dictionary mapping mad_libs prompt to users's corresponding input
+mad_libs = {}
+
+#List of all mice names (15 total)
+mice_names = ["Mouse 1", "Mouse 2", "Mouse 3", "Mouse 4", "Mouse 5", "Mouse 6", "Mouse 7", "Mouse 8", 
+              "Mouse 9", "Mouse 10", "Mouse 11", "Mouse 12", "Mouse 13", "Mouse 14", "Mouse 15"]
+#Dictionary mapping each mouse name (placed in a list) to their corresponding group (10 in OSA, 5 in no OSA)
+mouse_group = {"OSA group": [], "No OSA group": []}
+#Dictionary mapping each mouse name to split groups from OSA group, SG or NG (5 in SG, 5 in NG)
+split_group = {"SG group": [], "NG group": []}
+
+#List of possible day descriptions (in sentences)
+day_lines = ["It's your first day on the job and you just got the 15 elderly mice. What would you like to do first?",
+             """All mice will go through cognitive testing #1 today to establish a baseline cognitive capacity! What would you like to
+do first?""",
+            "The mice are just getting adjusted to their new homes today. What would you like to do first?",
+            """Today is PTFE and saline injection day! The OSA group will be getting a PTFE injection and the non-OSA group a saline 
+injection. Because the injections are VERY important, you will do it first so you won't forget about it!""",
+            "The mice are just waking up from their injections. What would you like to do first?",
+            """Today is cognitive testing #2 (OSA group) and #3 (non-OSA group)! This is to determine if the injections affected 
+their cognitive capacities or not. What would you like to do first?""",
+            """The mice are possibly developing cognitive capacity changes now after the injections. What would you like to do 
+first?""",
+            """The non-OSA mice group are now done the experiment! They were only here for a control and can now go on do what happy
+mice like to do. However, the OSA group isn't done. This group will now be split into 2 groups, the sour water group (SG) and plain 
+water group (NG). What would you like to do first?""",
+            """Today is cognitive test #4 for both NG and SG groups. This is to see if sleep apnea induced by the PTFE injections 
+actually caused cognitive decline or not. What would you like to do first?""",
+            """Today and from now on, you will be administering the SG mice sour citric acid water only and the NG mice plain water. 
+What would you like to do first?""",
+            """Today will be the same as yesterday just to allow for the citric acid water to do its thing on the cognitive capacities 
+of the mice. What would you like to do first?""",
+            """Today is the last day of the in-lab research! You will be conducting the final cognitive testing today for the SG group 
+and NG group (cognitive test #5). What would you like to do first?"""]  
+
+#List of all possible groups in the experiment
+exp_groups = ["OSA group", "No OSA group", "SG group", "NG group"]
+
+#START OF CODE EXECUTION
+#print description of experiment
+print("                             -----------Welcome to the Taste Mice Labs!-----------")
+scientist_name = input("What is your name? ")
+print("Welcome scientist " + str(scientist_name) + """! 
+
+You are the principal investigator at the Taste Mice Labs and you will be in charge of the experiment testing if the 
+administration of sour citric acid water before bed in elderly obstructive sleep apnea induced mice will lower the 
+risk of developing Alzheimer's Disease in the future! This is very important research and can change a lot of lives 
+so it is important that you try to do this experiment as accurate as possible.
+
+You will be given 15 mice for this experiment and you must remember to take care of them including feeding and giving
+them water! If not, they will die in 2-4 days!
+
+To induce obstructive sleep apnea (OSA) into 10 of the mice, a PTFE injection will be used. The other 5 mice will 
+be given a saline injection as a control.
+
+The 10 mice with PTFE injections will then be broken down into 2 groups of 5:
+The sour water group (SG) - they will be administered sour water
+The plain water group (NG) - they will be administered plain water
+NOTE: Remember these group names. It will be important later on!
+
+The mice's cognitive capacities will be tested various times through cognitive tests throughout the experiment.
+A higher cognitive test score means a better cognitive state for the mouse.
+
+The cognitive test scores for various mice groups will be statistically compared through ANOVAs at the end of the 
+experiment to determine if sour water actually impacted the risk of Alzheimer's Disease!
+
+The entire experiment will last for 11 days plus statistical analysis and report writing.
+
+REMEMBER: If all mice from one of the experimental/control groups die before the end of the experiment, your 
+experiment would have been a failure and you'd be wasting the lab's resources! So try not to let that happen!
+""")
+
+are_you_ready = input("Once you're ready, enter any key to continue: ")
+
+print("Randomizing 15 mice into 2 groups (OSA and non-OSA)…")
+
+for i in range(0, 15, 1):
+    if i < 5:
+        #randomly add 5 mice into the No OSA group
+        rand_int = random.randint(0,14)
+        the_mouse = mice_names[rand_int]
+        while the_mouse in mouse_group["No OSA group"]:
+            rand_int = random.randint(0,14)
+            the_mouse = mice_names[rand_int]
+        else: 
+            mouse_group["No OSA group"].append(the_mouse)
+    else:
+        #randomly add 10 mice into the OSA group
+        rand_int = random.randint(0,14)
+        the_mouse = mice_names[rand_int]
+        while (the_mouse in mouse_group["No OSA group"]) or (the_mouse in mouse_group["OSA group"]):
+            rand_int = random.randint(0,14)
+            the_mouse = mice_names[rand_int]
+        else: 
+            mouse_group["OSA group"].append(the_mouse)
+print("""
+OSA group: """ + ", ".join(mouse_group["OSA group"]))
+print("No OSA group: " + ", ".join(mouse_group["No OSA group"]))
+
+#needs to be true for game to run, if user quits, it becomes false
+already_quit = True
+Lets_go = True
+if (Lets_go):
+    #if user quit, I_quit becomes False and game ends
+    I_quit = True
+    #if user fails a task, becomes False and game ends
+    I_failed = True
+    #for days 0 to 11, show specific menu options
+    for i in range(0,12,1):
+        #if the game is still running
+        if(I_quit) and (I_failed):
+            #On days 0,2,4,6,9,10, display only normal menu (food, water, quit)
+            if i == 0 or i == 2 or i == 4 or i == 6 or i == 9 or i == 10:
+                print("""
+                ----Day """ + str(i) + "----")
+                print(day_lines[i])
+                option_norm = feed_and_water()
+                if option_norm == "quit":
+                    I_quit = False
+                #on days 9 and 10
+                elif i == 9 or i == 10:
+                    #numbers used to determine item location in a list
+                    Agroup_num = 4
+                    Aitem_num = 2
+                    Bgroup_num = 4
+                    Bitem_num = 2
+                    #call function just_foodwater to allow choice between option A or B in any order, and execute feed/water
+                    choice_menu = just_foodwater(option_norm, exp_groups, Agroup_num, Aitem_num, Bgroup_num, Bitem_num, i)    
+                    (will_quit, food1, water1, food2, water2) = choice_menu
+                    if will_quit == "quit":
+                        I_quit = False
+                    else:
+                        #on days 9 and 10, calculate helathbar status, display menu, check death
+                        if i ==9 or i == 10:
+                            #calculate new healthbar status for mice
+                            update_health(split_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                            update_health(split_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                            #give a prompt to corresponding obtain user response (for final notes)
+                            add_words(i, mad_libs)
+                            #display menu with cognitive test option (take from split_group dict)
+                            menu = experiment_menu(i, split_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                            #check if any mice are dead
+                            death = check_dead_mice(dead_mice, split_group, mouse_group)
+                            #if too many mice died, end game
+                            if death == "quit":
+                                I_quit = False
+                        else:
+                            #caluclate new healthbar for the mice
+                            update_health(mouse_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                            update_health(mouse_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                            #give a prompt to corresponding obtain user response (for final notes)
+                            add_words(i, mad_libs)
+                            #display menu with cognitive test option (take from mouse_group dict)
+                            menu = experiment_menu(i, mouse_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                            death = check_dead_mice(dead_mice, split_group, mouse_group)
+                            if death == "quit":
+                                I_quit = False
+                        #if user fails taks, game ends
+                        if menu == "quit":
+                            I_quit = False
+                        print("------End of Day " + str(i) + "------")
+                else:
+                    #numbers used to determine item location in a list
+                    Agroup_num = 2
+                    Aitem_num = 0
+                    Bgroup_num = 2
+                    Bitem_num = 0
+                    #display regular menu
+                    choice_menu = just_foodwater(option_norm, exp_groups, Agroup_num, Aitem_num, Bgroup_num, Bitem_num, i) 
+                    (will_quit, food1, water1, food2, water2) = choice_menu
+                    #if will quit if user chooses to quit
+                    if will_quit == "quit":
+                        I_quit = False
+                    else:
+                        #caluclate new healthbar for the mice
+                        update_health(mouse_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                        update_health(mouse_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                        #give a prompt to corresponding obtain user response (for final notes)
+                        add_words(i, mad_libs)
+                        #display menu with cognitive option
+                        menu = experiment_menu(i, mouse_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                        #check if any mice are dead
+                        death = check_dead_mice(dead_mice, split_group, mouse_group)
+                        if death == "quit":
+                            I_quit = False
+                        if menu == "quit":
+                            I_quit = False
+                        print("------End of Day " + str(i) + "------")
+
+            #on day 3, show menu optinon and call type game function
+            elif i == 3:
+                print("""
+                ----Day """ + str(i) + "----")
+                print(day_lines[i])
+                type_game = type_fast()
+                while type_game < 3: 
+                    print("Oh no you failed! Try again!")
+                    type_game = type_fast()
+                print("""Congrats you passed! The OSA group mice have gotten their PTFE injections and the 
+non-OSA group have gotten their saline injections.""") 
+                #show normal 
+                option_norm = feed_and_water()
+                if option_norm == "quit":
+                    I_quit = False
+                else:
+                    #numbers used to determine item location in a list
+                    Agroup_num = 2
+                    Aitem_num = 0
+                    Bgroup_num = 2
+                    Bitem_num = 0
+                    choice_menu = just_foodwater(option_norm, exp_groups, Agroup_num, Aitem_num, Bgroup_num, Bitem_num, i) 
+                    (will_quit, food1, water1, food2, water2) = choice_menu
+                    if will_quit == "quit":
+                        I_quit = False
+                    else:
+                        #calculate the new healthbar of the mice
+                        update_health(mouse_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                        update_health(mouse_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                        #give a prompt to corresponding obtain user response (for final notes)
+                        add_words(i, mad_libs)
+                        #display the menu with cognitive option
+                        menu = experiment_menu(i, mouse_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                        #check if any mice are dead
+                        death = check_dead_mice(dead_mice, split_group, mouse_group)
+                        #if too many mice died, quit game
+                        if death == "quit":
+                            I_quit = False
+                        if menu == "quit":
+                            I_quit = False
+                        print("------End of Day " + str(i) + "------") 
+            # On day seven, the code randomizes the OSA rats into the sour water (SG) and Plain water (NG) groups
+            elif i == 7:
+                print("""
+                ----Day """ + str(i) + "----")
+                print(day_lines[i])
+                print("Randomizing mice group into sour water (SG) and plain water (NG) groups…")
+                #splits OSA group into 2 groups, SG and NG group
+                for k in range (0, len(mouse_group["OSA group"]), 1):
+                    # 
+                    if k < 5:
+                        split_group["SG group"].append(mouse_group["OSA group"][k])
+                    else:
+                        split_group["NG group"].append(mouse_group["OSA group"][k])
+                print("""
+SG group: """ + ", ".join(split_group["SG group"]))
+                print("NG group: " + ", ".join(split_group["NG group"]))
+                option7 = feed_and_water()
+                if option7 == "quit":
+                    I_quit = False
+                else:
+                    #numbers used to determine item location in a list
+                    Agroup_num = 4
+                    Aitem_num = 2
+                    Bgroup_num = 4
+                    Bitem_num = 2
+                    choice_menu = just_foodwater(option7, exp_groups, Agroup_num, Aitem_num, Bgroup_num, Bitem_num, i) 
+                    (will_quit, food1, water1, food2, water2) = choice_menu
+                    if will_quit == "quit":
+                        I_quit = False
+                    else:
+                        update_health(split_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                        update_health(split_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                        add_words(i, mad_libs)
+                        menu = experiment_menu(i, split_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                        death = check_dead_mice(dead_mice, split_group, mouse_group)
+                        if death == "quit":
+                            I_quit = False
+                        if menu == "quit":
+                            I_quit = False
+                        print("------End of Day " + str(i) + "------") 
+            else:
+                print("""
+                ----Day """ + str(i) + "----")
+                print(day_lines[i])
+                option_cog = feed_water_test()
+                print(option_cog)
+                if option_cog == "quit":
+                    I_quit = False
+                elif i == 11 or i == 8:
+                    #numbers used to determine item location in a list
+                    Agroup_num = 4
+                    Aitem_num = 2
+                    Bgroup_num = 4
+                    type_test = "game"
+                    Bitem_num = 2
+                    choice_menu = foodwatertest(option_cog, exp_groups, Agroup_num, Aitem_num, Bgroup_num, Bitem_num, i, type_test, split_group)    
+                    (did_quit, list_OSA, food1, water1, food2, water2) = choice_menu
+                    if did_quit == "quit":
+                        I_quit = False
+                    else:
+                        update_health(split_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                        update_health(split_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                        add_words(i, mad_libs)
+                        menu = experiment_menu(i, split_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                        death = check_dead_mice(dead_mice, split_group, mouse_group)
+                        if death == "quit":
+                            I_quit = False
+                        if menu == "quit":
+                            I_quit = False
+                        print("------End of Day " + str(i) + "------")
+                else:
+                    #numbers used to determine item location in a list
+                    Agroup_num = 2
+                    Aitem_num = 0
+                    Bgroup_num = 2
+                    Bitem_num = 0
+                    if i == 1 or i == 5:
+                        type_test = "mc"
+                    else:
+                        type_test = "game"
+                    choice_menu = foodwatertest(option_cog, exp_groups, Agroup_num, Aitem_num, Bgroup_num, Bitem_num, i, type_test, mouse_group)
+                    (did_quit, list_OSA, food1, water1, food2, water2) = choice_menu
+                    if did_quit == "quit":
+                        I_quit = False
+                    else:
+                        if i == 1:
+                            for item in list_OSA[0]:
+                                CT1_OSA.append(item)
+                            for item in list_OSA[1]:
+                                CT1_NoOSA.append(item) 
+                        elif i == 5:
+                            for item in list_OSA[0]:
+                                CT2_OSA.append(item)
+                            for item in list_OSA[1]:
+                                CT3_NoOSA.append(item) 
+                        if i==1 or i==5:
+                            update_health(mouse_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                            update_health(mouse_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                            add_words(i, mad_libs)
+                            menu = experiment_menu(i, mouse_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                            death = check_dead_mice(dead_mice, split_group, mouse_group)
+                            if death == "quit":
+                                I_quit = False
+                        else:
+                            update_health(split_group[exp_groups[Aitem_num]], food1, water1, dead_mice)
+                            update_health(split_group[exp_groups[Aitem_num + 1]], food2, water2, dead_mice)
+                            add_words(i, mad_libs)
+                            menu = experiment_menu(i, split_group, food1, water1, food2, water2, CT1_OSA, CT1_NoOSA, CT2_OSA, CT3_NoOSA, CT4_SG, CT4_NG, CT5_SG, CT5_NG, mouse_group, split_group, dead_mice)
+                            death = check_dead_mice(dead_mice, split_group, mouse_group)
+                            if death == "quit":
+                                I_quit = False
+                        if menu == "quit":
+                            I_quit = False
+                        print("------End of Day " + str(i) + "------")
+                      
+  
+        else:
+            already_quit = False
+            #when quit the lab at any point, breaks out of loop and ends program
+            print("You quit the lab! Better luck next time!")
+            break    
+    if i >= 11:
+        if (already_quit) and I_quit != False:
+    
+            
+            print("""
+Now that you have collected all the cognitive test results, it is now time to run statistical analyses and 
+determine if the sour water lowered the risk of Alzheimer's Disease in elderly sleep apnea-induced mice.
+
+First, we will conduct the control comparisons using a repeated-measures ANOVA between CT1 and CT2 as well as 
+CT1 and CT3 to ensure that the injections did not cause any changess to cognition.
+
+If any mice have already died, their cognitive test scores will be removed for the statistical analysis.
+""")            
+            input("Press any key when you're ready.")
+            first_comp = RM_stats("OSA group", mouse_group, "CT1", "CT2", CT1_OSA, CT2_OSA, dead_mice, 0)
+            second_comp = RM_stats("No OSA group", mouse_group, "CT1", "CT3", CT1_NoOSA, CT3_NoOSA, dead_mice, 1)
+
+            print("""
+            
+We will now conduct the statistical tests comparing SG and NG group before and after
+sour water/plain water using a mixed-design ANOVA.
+
+If the interaction is significant, within-subjects simple effects will be conducted.
+
+""")
+            input("Press any key when you're ready.")
+            print(split_group)
+            test = md_anova("SG group", "NG group", split_group, "CT4", "CT5", CT4_SG, CT4_NG, CT5_SG, CT5_NG, dead_mice)
+            print("""
+Now that you have completed the analysis. It is time to write your report.
+Throughout this experiment, you wrote down some notes on the mice however, you were in such
+a rush that you only wrote down one word at time! 
+You now have to try and decipher what you wrote. 
+""")
+            input("""Once you press any key, open up the file called "my_notes.txt" and you will
+see your notes""")
+            paper_open = open("originaltext.txt", "r")
+            #output file to write the result to
+            paper_out = open("my_notes.txt", "w")
+            #for each line in the input file
+            for line in paper_open:
+                #read replace the string and write to output file
+                sample1 = paper_open.read()
+                sample2 = sample1.replace("(results)", test)
+                sample3 = sample2.replace("(location)", mad_libs["location"])
+                sample4 = sample3.replace("(animal)", mad_libs["animal"])
+                sample5 = sample4.replace('(item)', mad_libs["item"])
+                sample6 = sample5.replace('(adjective)', mad_libs["adjective"])
+                sample7 = sample6.replace('(emotion)', mad_libs["emotion"])
+                sample8 = sample7.replace('(adverb)', mad_libs["adverb"])
+                sample9 = sample8.replace('(verb)', mad_libs["verb"])
+                sample10 = sample9.replace('(verb1)', mad_libs["verb1"])
+                sample11 = sample10.replace('(celebrity)', mad_libs["celebrity"])
+                sample12 = sample11.replace('(food)', mad_libs["food"])
+                sample13 = sample12.replace('(noun)', mad_libs["noun"])
+                sample14 = sample13.replace('(adverb1)', mad_libs["adverb1"])
+                #close input and output files
+            paper_out.write(sample14)
+            paper_open.close()
+            paper_out.close()
+
+            print("""
+Congrats! You have completed the research and the funding given to you did not go to waste! 
+You are now ready to move on to more complex studies. 
+
+Thanks for playing!
+""")
+else:
+    if (already_quit):
+        print("quit")
+    
+
+
